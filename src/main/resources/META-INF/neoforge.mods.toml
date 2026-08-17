@@ -1,0 +1,28 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mods]]
+modId = "lifeessentials"
+version = "1.0.0"
+displayName = "Life Essentials"
+description = '''Adds an iPhone to Minecraft: control your real Spotify / Apple Music, text other phones, and wear AirPods.'''
+authors = "Rafael Ribeiro"
+logoFile = "assets/lifeessentials/icon.png"
+
+[[mixins]]
+config = "lifeessentials.mixins.json"
+
+[[dependencies.lifeessentials]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.0,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.lifeessentials]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"

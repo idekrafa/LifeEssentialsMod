@@ -1,0 +1,11 @@
+{
+	"itemGroup.lifeessentials": "Life Essentials",
+	"item.lifeessentials.phone": "iPhone",
+	"item.lifeessentials.airpods": "AirPods",
+	"item.lifeessentials.circuit_board": "Circuit Board",
+	"tooltip.lifeessentials.phone.number": "Number: %s",
+	"tooltip.lifeessentials.phone.no_number": "No number yet — pick it up or right-click to activate",
+	"tooltip.lifeessentials.phone.hint": "Right-click to open",
+	"tooltip.lifeessentials.airpods.hint": "Right-click to wear / take off",
+	"tooltip.lifeessentials.circuit_board.hint": "Used to craft electronics"
+}

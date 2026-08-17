@@ -1,0 +1,21 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		"III",
+		"III",
+		"ICI"
+	],
+	"key": {
+		"I": {
+			"item": "minecraft:iron_ingot"
+		},
+		"C": {
+			"item": "lifeessentials:circuit_board"
+		}
+	},
+	"result": {
+		"id": "lifeessentials:phone",
+		"count": 1
+	}
+}

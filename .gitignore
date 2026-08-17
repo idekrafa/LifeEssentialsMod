@@ -1,0 +1,24 @@
+# Gradle
+.gradle/
+build/
+
+# ModDevGradle / run environments
+run/
+runs/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+
+# OS / tooling
+.DS_Store
+__pycache__/
+
+# local-only archives (old Fabric build) and task notes
+archive/
+tasks/

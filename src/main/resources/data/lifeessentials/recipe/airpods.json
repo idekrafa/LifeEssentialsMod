@@ -1,0 +1,20 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		"Q Q",
+		"QCQ"
+	],
+	"key": {
+		"Q": {
+			"item": "minecraft:quartz"
+		},
+		"C": {
+			"item": "lifeessentials:circuit_board"
+		}
+	},
+	"result": {
+		"id": "lifeessentials:airpods",
+		"count": 1
+	}
+}
