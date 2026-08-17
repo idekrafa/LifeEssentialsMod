@@ -123,7 +123,12 @@ survive restarts. Tap any track to start the nearest speaker on it.
 ### 🎚 Speaker setup
 
 **None.** Since 2.0 the decoder is built into the mod — mp3, flac, m4a, opus, web
-links and YouTube all play out of the box, on every platform, with nothing to install.
+links and YouTube all play out of the box, with nothing to install.
+
+Built-in decoding covers **macOS** (Intel and Apple Silicon), **64-bit Windows** and
+**64-bit Linux** (Steam Deck included). On anything else — 32-bit, ARM Linux, Alpine —
+the mod falls back to `ffmpeg`/`yt-dlp` if you have them, so you lose the convenience
+but not the audio.
 
 <sub>Versions before 2.0 needed `ffmpeg` on every listening machine, plus `yt-dlp` for
 YouTube. That path is still there as an automatic fallback if the built-in decoder

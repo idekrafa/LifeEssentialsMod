@@ -104,6 +104,25 @@ shadowJar {
 	relocate 'com.grack.nanojson', "${shaded}.com.grack.nanojson"
 	relocate 'net.iharder', "${shaded}.net.iharder"
 
+	/*
+	 * LavaPlayer ships 13 platform binaries and they are almost the entire jar.
+	 * Decoding only ever happens on a *client*, so the platforms that matter are the
+	 * ones people actually play on: macOS (the darwin binary is universal, x86-64 and
+	 * arm64 in one), 64-bit Windows, and 64-bit Linux — which covers the Steam Deck.
+	 *
+	 * Dropped: 32-bit Windows and Linux, ARM Linux, and musl/Alpine. A client on one
+	 * of those degrades to the ffmpeg fallback rather than losing audio, which is why
+	 * MediaTools is still around.
+	 */
+	exclude 'natives/win-x86/**'
+	exclude 'natives/linux-x86/**'
+	exclude 'natives/linux-arm/**'
+	exclude 'natives/linux-armhf/**'
+	exclude 'natives/linux-aarch32/**'
+	exclude 'natives/linux-aarch64/**'
+	exclude 'natives/linux-musl-x86-64/**'
+	exclude 'natives/linux-musl-aarch64/**'
+
 	mergeServiceFiles()
 	exclude 'META-INF/*.SF'
 	exclude 'META-INF/*.DSA'
