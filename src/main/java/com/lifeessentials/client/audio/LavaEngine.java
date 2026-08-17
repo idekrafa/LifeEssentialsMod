@@ -32,7 +32,7 @@ public final class LavaEngine {
 	/** How much audio LavaPlayer decodes ahead. Covers a network hiccup. */
 	private static final int FRAME_BUFFER_MS = 1000;
 
-	private static AudioPlayerManager manager;
+	private static volatile AudioPlayerManager manager;
 	private static String failure;
 	private static boolean tried;
 
@@ -46,6 +46,14 @@ public final class LavaEngine {
 	/** True when the engine loaded; false means fall back to the external tools. */
 	public static synchronized boolean isAvailable() {
 		return manager() != null;
+	}
+
+	/**
+	 * Non-blocking check for UI code — never triggers the build, so it is safe to
+	 * call from a render method every frame.
+	 */
+	public static boolean isReady() {
+		return manager != null;
 	}
 
 	/** Why the engine is unusable, or an empty string when it is fine. */

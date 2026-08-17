@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import com.lifeessentials.client.ClientNet;
+import com.lifeessentials.client.audio.LavaEngine;
 import com.lifeessentials.client.audio.MediaTools;
 import com.lifeessentials.client.audio.MusicFolder;
 import com.lifeessentials.client.audio.TrackImporter;
@@ -118,8 +119,12 @@ public class AddTrackScreen extends PhoneUiScreen {
 			graphics.drawString(this.font, trim("Paste a link, or tap a file", screenW - 8),
 					screenX + 4, screenY + Y_STATUS, COL_MUTED, false);
 		}
-		graphics.drawString(this.font, trim(MediaTools.status(), screenW - 8),
-				screenX + 4, screenY + Y_DECODERS, COL_MUTED, false);
+		// only worth a line when the built-in decoder isn't running and the
+		// external tools actually matter again
+		if (!LavaEngine.isReady()) {
+			graphics.drawString(this.font, trim(MediaTools.status(), screenW - 8),
+					screenX + 4, screenY + Y_DECODERS, COL_MUTED, false);
+		}
 
 		graphics.fill(screenX + 2, screenY + Y_HEADER_BAND, screenX + screenW - 2,
 				screenY + Y_HEADER_BAND + 11, 0x44000000);

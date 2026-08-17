@@ -83,7 +83,7 @@ game ducks under it.
 | :-- | :-- |
 | **MP3 / FLAC / M4A / WAV / OGG / OPUS** | decoded and played from each listener's `lifeessentials-music` folder |
 | **Direct http(s) links** | streamed straight off the web — nobody needs a local copy |
-| **YouTube + YouTube Music links** | resolved with yt-dlp, then streamed |
+| **YouTube + YouTube Music links** | resolved and decoded in-process — nothing to install |
 | **YouTube / YT Music playlists** | imports up to 100 tracks in one paste |
 | **Spotify tracks** | handed to each listener's desktop Spotify (DRM can't be decoded — see the FAQ) |
 
@@ -177,14 +177,14 @@ can't drive auto-play on listeners (no track ids in the media session API) — r
 Listen Along from macOS players works fully. Linux isn't supported yet. The phone, texting,
 and AirPods work everywhere.
 
-**A YouTube track sometimes takes a few seconds, or briefly refuses to start.**
-Normal. Playback pipes `yt-dlp` straight into `ffmpeg` rather than handing ffmpeg a media
-url — YouTube ties those urls to the client that requested them, so the direct route fails
-most of the time. The trade-off is a second or two of start-up, which the speaker
-compensates for by skipping ahead so you land in sync with everyone else. YouTube also
-rate-limits bursts, and a speaker starting a track asks every listener to fetch at once, so
-playback retries a few times before giving up. If it does give up, the reason lands in your
-chat.
+**A YouTube track takes a few seconds to start.**
+Normal — around three or four. YouTube signs its audio links with a cipher that has to be
+worked out before anything can be fetched. Once playing, decoding runs hundreds of times
+faster than realtime, so it never stutters after that. The speaker skips ahead by however
+long the start-up took, which is what lands you in sync with everyone already listening.
+
+If a track fails outright, the reason lands in your chat rather than leaving you with
+silence and no explanation.
 
 **Is the speaker safe on a public server?**
 Track sources are validated server-side: file names can't escape the music folder, and only

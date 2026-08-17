@@ -25,6 +25,17 @@ public final class AudioSources {
 	private static final int CONNECT_TIMEOUT_MS = 10000;
 	private static final int READ_TIMEOUT_MS = 20000;
 
+	/**
+	 * Format preference for the yt-dlp fallback.
+	 *
+	 * <p>An .m4a is an MP4 whose index can sit at the end of the file, and down a
+	 * pipe there is no seeking back to it — ffmpeg intermittently rejects the stream
+	 * outright. WebM is a streaming container and decodes from the first byte, and
+	 * its Opus audio is already 48 kHz, so nothing is resampled.
+	 */
+	private static final String YTDLP_AUDIO_FORMAT =
+			"bestaudio[ext=webm]/bestaudio[acodec=opus]/bestaudio/best";
+
 	/** Why a track couldn't be opened — shown once per track in chat. */
 	public static class OpenFailure extends Exception {
 		public OpenFailure(String message) {
@@ -124,7 +135,7 @@ public final class AudioSources {
 				// listener in range fetch at once; let yt-dlp back off on its own too
 				"--retries", "5", "--fragment-retries", "5", "--retry-sleep", "2",
 				"--socket-timeout", "15",
-				"-f", YoutubeResolver.AUDIO_FORMAT, "-o", "-",
+				"-f", YTDLP_AUDIO_FORMAT, "-o", "-",
 				"https://www.youtube.com/watch?v=" + track.uri());
 
 		List<String> decode = new ArrayList<>(List.of(MediaTools.ffmpeg(),
@@ -225,26 +236,6 @@ public final class AudioSources {
 			stream.close();
 		} catch (IOException ignored) {
 			// nothing useful to do
-		}
-	}
-
-	/** Reads the length of a local file in seconds, or 0 when it can't be read. */
-	public static int probeDurationSeconds(Path path) {
-		String ffmpeg = MediaTools.ffmpeg();
-		if (ffmpeg == null) return 0;
-		// ffprobe usually sits next to ffmpeg; fall back to parsing ffmpeg's own report
-		String probe = ffmpeg.endsWith("ffmpeg.exe")
-				? ffmpeg.substring(0, ffmpeg.length() - 10) + "ffprobe.exe"
-				: (ffmpeg.endsWith("ffmpeg") ? ffmpeg.substring(0, ffmpeg.length() - 6) + "ffprobe" : null);
-		if (probe == null) return 0;
-		String output = MediaTools.capture(List.of(probe, "-v", "error", "-show_entries",
-				"format=duration", "-of", "default=noprint_wrappers=1:nokey=1",
-				path.toAbsolutePath().toString()), 15);
-		if (output == null) return 0;
-		try {
-			return (int) Math.round(Double.parseDouble(output.strip()));
-		} catch (NumberFormatException e) {
-			return 0;
 		}
 	}
 }

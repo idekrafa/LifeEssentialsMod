@@ -57,8 +57,12 @@ public final class TrackImporter {
 			return youtube(value, customTitle);
 		}
 		if (TrackUris.isHttpUrl(value)) {
+			// worth the round trip: a known duration lets the speaker advance the
+			// queue on its own clock instead of waiting for a listener to report
+			List<Track> resolved = LavaLookup.resolve(value, TrackSource.URL, 1);
+			int duration = resolved.isEmpty() ? 0 : resolved.get(0).durationSeconds();
 			String title = customTitle.isEmpty() ? TrackUris.prettyName(value) : customTitle;
-			return new Result(List.of(new Track("", title, "Link", TrackSource.URL, value, 0)),
+			return new Result(List.of(new Track("", title, "Link", TrackSource.URL, value, duration)),
 					"Added " + title);
 		}
 		return localFile(value, customTitle);
@@ -76,28 +80,22 @@ public final class TrackImporter {
 	}
 
 	private static Result youtube(String value, String customTitle) {
-		if (!MediaTools.hasYtDlp()) {
-			return Result.failed("YouTube needs yt-dlp installed — see the README");
-		}
-		List<Track> resolved = YoutubeResolver.resolveForImport(value, MusicPayloads.MAX_IMPORT);
+		List<Track> resolved = LavaLookup.resolve(value, TrackSource.YOUTUBE, MusicPayloads.MAX_IMPORT);
 		if (!resolved.isEmpty()) {
 			if (resolved.size() == 1 && !customTitle.isEmpty()) {
 				Track only = resolved.get(0);
 				resolved = List.of(new Track("", customTitle, only.artist(), TrackSource.YOUTUBE,
 						only.uri(), only.durationSeconds()));
 			}
-			String message = resolved.size() == 1
+			return new Result(resolved, resolved.size() == 1
 					? "Added " + resolved.get(0).displayTitle()
-					: "Added " + resolved.size() + " tracks from the playlist";
-			if (!MediaTools.hasFfmpeg()) {
-				message += " — install ffmpeg to actually hear them";
-			}
-			return new Result(resolved, message);
+					: "Added " + resolved.size() + " tracks from the playlist");
 		}
-		// yt-dlp couldn't read the metadata; still worth storing the bare id
+		// the lookup failed, but a bare id is still playable — store it rather than
+		// making the player paste the link again
 		String id = TrackUris.youtubeVideoId(value);
 		if (id == null) {
-			return Result.failed("yt-dlp couldn't read that YouTube link");
+			return Result.failed("That YouTube link couldn't be read");
 		}
 		String title = customTitle.isEmpty() ? "YouTube video" : customTitle;
 		return new Result(List.of(new Track("", title, "YouTube", TrackSource.YOUTUBE, id, 0)),
@@ -114,15 +112,12 @@ public final class TrackImporter {
 					+ " folder");
 		}
 		Path path = MusicFolder.resolve(name);
-		int duration = path == null ? 0 : AudioSources.probeDurationSeconds(path);
+		int duration = path == null ? 0
+				: LavaLookup.durationSeconds(path.toAbsolutePath().toString(), TrackSource.FILE);
 		String title = customTitle.isEmpty() ? TrackUris.prettyName(name) : customTitle;
-		String message = "Added " + title;
-		if (!MediaTools.hasFfmpeg() && !name.toLowerCase(Locale.ROOT).endsWith(".wav")) {
-			message += " — install ffmpeg to play it";
-		}
 		return new Result(
 				List.of(new Track("", title, "Local file", TrackSource.FILE, name, duration)),
-				message);
+				"Added " + title);
 	}
 
 	/** Accepts the exact name or a case-insensitive match from the folder. */

@@ -6,6 +6,7 @@ import java.util.Locale;
 import com.lifeessentials.client.ClientMusicLibrary;
 import com.lifeessentials.client.ClientNet;
 import com.lifeessentials.client.ClientSpeakers;
+import com.lifeessentials.client.audio.LavaEngine;
 import com.lifeessentials.client.audio.MediaTools;
 import com.lifeessentials.music.Playlist;
 import com.lifeessentials.music.Track;
@@ -211,8 +212,11 @@ public class SpeakerScreen extends Screen {
 		graphics.drawString(this.font, right, x + barWidth - this.font.width(right),
 				top + 67, COL_MUTED, false);
 
-		graphics.drawString(this.font, trim(MediaTools.status(), COLUMN_W), x, top + 168,
-				COL_MUTED, false);
+		// the decoder line is noise unless the built-in engine failed to start
+		if (!LavaEngine.isReady()) {
+			graphics.drawString(this.font, trim(MediaTools.status(), COLUMN_W), x, top + 168,
+					COL_MUTED, false);
+		}
 		graphics.drawString(this.font, trim("Heard " + view.range() + " blocks away", COLUMN_W),
 				x, top + 180, COL_MUTED, false);
 	}
