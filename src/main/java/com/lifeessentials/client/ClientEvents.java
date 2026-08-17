@@ -1,10 +1,16 @@
 package com.lifeessentials.client;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.lifeessentials.LifeEssentials;
 import com.lifeessentials.ModItems;
+import com.lifeessentials.client.audio.AudioEngine;
+import com.lifeessentials.client.audio.MediaTools;
+import com.lifeessentials.client.audio.MusicFolder;
 import com.lifeessentials.client.music.MusicClientState;
 import com.lifeessentials.client.render.PhonePoseRenderer;
 import com.lifeessentials.client.sound.VolumeDucker;
+import com.lifeessentials.net.MusicPayloads;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.InteractionHand;
@@ -24,12 +30,24 @@ public final class ClientEvents {
 
 	@SubscribeEvent
 	public static void onClientTick(ClientTickEvent.Post event) {
-		MusicClientState.clientTick(Minecraft.getInstance());
+		Minecraft minecraft = Minecraft.getInstance();
+		AudioEngine.clientTick(minecraft);
+		MusicClientState.clientTick(minecraft);
+	}
+
+	@SubscribeEvent
+	public static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+		MediaTools.probeAsync();
+		CompletableFuture.runAsync(MusicFolder::ensureExists); // don't touch disk on the render thread
+		ClientNet.send(MusicPayloads.LibraryRequestC2S.INSTANCE);
 	}
 
 	@SubscribeEvent
 	public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
 		ClientPhoneData.reset();
+		ClientMusicLibrary.reset();
+		ClientSpeakers.reset();
+		AudioEngine.stopAll();
 		MusicClientState.onDisconnect();
 		VolumeDucker.reset();
 	}

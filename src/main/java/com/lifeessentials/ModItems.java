@@ -1,6 +1,7 @@
 package com.lifeessentials;
 
 import com.lifeessentials.item.AirPodsItem;
+import com.lifeessentials.item.JblSpeakerItem;
 import com.lifeessentials.item.PhoneItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -23,6 +24,8 @@ public final class ModItems {
 			ITEMS.register("airpods", () -> new AirPodsItem(new Item.Properties().stacksTo(1)));
 	public static final DeferredItem<Item> CIRCUIT_BOARD =
 			ITEMS.register("circuit_board", () -> new Item(new Item.Properties()));
+	public static final DeferredItem<Item> JBL_SPEAKER = ITEMS.register("jbl_speaker",
+			() -> new JblSpeakerItem(ModBlocks.JBL_SPEAKER.get(), new Item.Properties()));
 
 	public static final Supplier<CreativeModeTab> MAIN_TAB = TABS.register("main",
 			() -> CreativeModeTab.builder()
@@ -31,6 +34,7 @@ public final class ModItems {
 					.displayItems((parameters, output) -> {
 						output.accept(PHONE.get());
 						output.accept(AIRPODS.get());
+						output.accept(JBL_SPEAKER.get());
 						output.accept(CIRCUIT_BOARD.get());
 					})
 					.build());

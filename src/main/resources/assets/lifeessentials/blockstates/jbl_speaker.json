@@ -1,0 +1,12 @@
+{
+	"variants": {
+		"facing=north,playing=false": { "model": "lifeessentials:block/jbl_speaker" },
+		"facing=east,playing=false":  { "model": "lifeessentials:block/jbl_speaker", "y": 90 },
+		"facing=south,playing=false": { "model": "lifeessentials:block/jbl_speaker", "y": 180 },
+		"facing=west,playing=false":  { "model": "lifeessentials:block/jbl_speaker", "y": 270 },
+		"facing=north,playing=true": { "model": "lifeessentials:block/jbl_speaker_playing" },
+		"facing=east,playing=true":  { "model": "lifeessentials:block/jbl_speaker_playing", "y": 90 },
+		"facing=south,playing=true": { "model": "lifeessentials:block/jbl_speaker_playing", "y": 180 },
+		"facing=west,playing=true":  { "model": "lifeessentials:block/jbl_speaker_playing", "y": 270 }
+	}
+}

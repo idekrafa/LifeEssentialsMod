@@ -1,0 +1,27 @@
+{
+	"type": "minecraft:crafting_shaped",
+	"category": "misc",
+	"pattern": [
+		"WWW",
+		"NCN",
+		"III"
+	],
+	"key": {
+		"W": {
+			"item": "minecraft:black_wool"
+		},
+		"N": {
+			"item": "minecraft:note_block"
+		},
+		"C": {
+			"item": "lifeessentials:circuit_board"
+		},
+		"I": {
+			"item": "minecraft:iron_ingot"
+		}
+	},
+	"result": {
+		"id": "lifeessentials:jbl_speaker",
+		"count": 1
+	}
+}

@@ -1,0 +1,6 @@
+{
+	"parent": "lifeessentials:block/jbl_speaker_base",
+	"textures": {
+		"end": "lifeessentials:block/jbl_speaker_end_on"
+	}
+}
