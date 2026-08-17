@@ -7,6 +7,16 @@ public interface MediaController {
 
 	boolean isInstalled();
 
+	/** Shown under "<app> not found" in the music app. */
+	default String unavailableReason() {
+		return "Install it on this computer";
+	}
+
+	/** False when the backend can't set the app's own volume (slider still ducks the game). */
+	default boolean supportsAppVolume() {
+		return true;
+	}
+
 	/** Cached — updated by {@link #refreshStatus}. */
 	boolean isRunning();
 

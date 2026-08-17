@@ -11,8 +11,8 @@ import net.minecraft.client.Minecraft;
 
 /** Client-side music session: polling, ducking, and speaker broadcasting. */
 public final class MusicClientState {
-	public static final SpotifyController SPOTIFY = new SpotifyController();
-	public static final AppleMusicController APPLE_MUSIC = new AppleMusicController();
+	public static final MediaController SPOTIFY = Controllers.spotify();
+	public static final MediaController APPLE_MUSIC = Controllers.appleMusic();
 
 	public static String selectedService = "spotify";
 	/** Phone volume slider, 0..100. Higher music volume = quieter game. */
@@ -98,7 +98,8 @@ public final class MusicClientState {
 	/** A nearby speaker is playing this Spotify track — play it locally too. */
 	public static void handleListenAlong(String trackId) {
 		if (!listenAlong || trackId == null || trackId.isEmpty()) return;
-		if (!SPOTIFY.isInstalled()) return;
+		if (!trackId.startsWith("spotify:")) return; // SMTC ids can't be played remotely
+		if (!SPOTIFY.isInstalled() && !SPOTIFY.isRunning()) return;
 		if (trackId.equals(lastListenAlongTrack) || trackId.equals(SPOTIFY.nowPlaying().trackId())) {
 			return;
 		}

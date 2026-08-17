@@ -124,7 +124,7 @@ public class MusicAppScreen extends PhoneUiScreen {
 		String subtitle;
 		if (!controller.isInstalled()) {
 			title = controller.displayName() + " not found";
-			subtitle = "Install it on this computer";
+			subtitle = controller.unavailableReason();
 		} else if (!controller.isRunning()) {
 			title = controller.displayName() + " is closed";
 			subtitle = "Tap Open app below";
@@ -166,14 +166,19 @@ public class MusicAppScreen extends PhoneUiScreen {
 
 	private static class VolumeSlider extends AbstractSliderButton {
 		VolumeSlider(int x, int y, int width, int height) {
-			super(x, y, width, height,
-					Component.literal("Volume: " + MusicClientState.volume + "%"),
-					MusicClientState.volume / 100.0);
+			super(x, y, width, height, label(MusicClientState.volume), MusicClientState.volume / 100.0);
+		}
+
+		/** Where the backend can't set the app's volume, be honest about what the slider does. */
+		private static Component label(int volume) {
+			String prefix = MusicClientState.controller().supportsAppVolume()
+					? "Volume: " : "Volume (game): ";
+			return Component.literal(prefix + volume + "%");
 		}
 
 		@Override
 		protected void updateMessage() {
-			setMessage(Component.literal("Volume: " + (int) Math.round(this.value * 100) + "%"));
+			setMessage(label((int) Math.round(this.value * 100)));
 		}
 
 		@Override

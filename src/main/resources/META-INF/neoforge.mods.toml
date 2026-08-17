@@ -4,7 +4,7 @@ license = "MIT"
 
 [[mods]]
 modId = "lifeessentials"
-version = "1.0.0"
+version = "1.1.0"
 displayName = "Life Essentials"
 description = '''Adds an iPhone to Minecraft: control your real Spotify / Apple Music, text other phones, and wear AirPods.'''
 authors = "Rafael Ribeiro"

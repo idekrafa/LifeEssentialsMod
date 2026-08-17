@@ -28,8 +28,8 @@ Every phone activates itself with its own unique number, like `(238) 230-2939`.
 <td>
 
 ### 🎵 Music — your <em>real</em> Spotify & Apple Music
-The phone remote-controls the actual desktop apps on your computer:
-now playing, play/pause, skip, and a volume slider.
+The phone remote-controls the actual desktop apps on your computer —
+**macOS and Windows** — now playing, play/pause, skip, and a volume slider.
 
 - **Volume ducking** — the louder your music, the quieter the game gets.
   Slide it up and creepers become elevator whispers. (Your saved sound
@@ -85,6 +85,9 @@ automatically (physics is undefeated).
 > **macOS heads-up:** the first time you control Spotify/Music, macOS asks once —
 > *"Minecraft wants to control Spotify"*. Click **OK** (it can hide behind the game window;
 > fix later in System Settings → Privacy & Security → Automation).
+>
+> **Windows heads-up:** control goes through Windows' own media session system — no setup.
+> If the phone says "Spotify not found", just open Spotify once so it can be detected.
 
 ## 🧱 Building from source
 
@@ -104,7 +107,11 @@ Listen Along is the honest version: it syncs the *track*, and each listener's ow
 plays it. Same song, same moment, fully legit.
 
 **Does music control work on Windows/Linux?**
-Not yet — the integration uses AppleScript, so it's macOS-only for now. The phone, texting,
+**Windows: yes** — via the System Media Transport Controls (AppleScript on macOS). Two
+Windows-specific quirks: the slider ducks game audio but can't change Spotify's own volume
+(Windows doesn't expose that per-app), and Windows broadcasters share the *song name* but
+can't drive auto-play on listeners (no track ids in the media session API) — receiving
+Listen Along from macOS players works fully. Linux isn't supported yet. The phone, texting,
 and AirPods work everywhere.
 
 **Which loaders?**
