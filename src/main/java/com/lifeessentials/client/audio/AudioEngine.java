@@ -34,8 +34,6 @@ public final class AudioEngine {
 	private static final long ERROR_COOLDOWN_MS = 60000;
 	/** Full volume this close to the speaker, then a smooth roll-off. */
 	private static final double NEAR_FIELD = 2.0;
-	/** Hard panning is unpleasant on headphones; keep some signal in both ears. */
-	private static final double MAX_PAN = 0.75;
 
 	private static final Map<BlockPos, SpeakerPlayback> ACTIVE = new HashMap<>();
 	private static final Map<BlockPos, Long> PAUSED_SINCE = new HashMap<>();
@@ -84,8 +82,11 @@ public final class AudioEngine {
 				continue;
 			}
 
-			float attenuation = attenuation(distance, view.range());
-			float gain = master * (view.volume() / 100.0f) * attenuation;
+			// OpenAL applies the distance roll-off itself, so the source gain is just
+			// the speaker's own volume. The attenuated value is still worth computing
+			// for the duck, which needs to know how loud this *sounds* from here.
+			float sourceGain = master * (view.volume() / 100.0f);
+			float perceived = sourceGain * attenuation(distance, view.range());
 
 			if (track.source() == TrackSource.SPOTIFY) {
 				if (view.playing() && !spotifyClaimed) {
@@ -99,10 +100,9 @@ public final class AudioEngine {
 				pauseOrDrop(pos);
 				continue;
 			}
-			if (gain > loudest) loudest = gain;
+			if (perceived > loudest) loudest = perceived;
 
-			float[] stereo = stereoGains(player, speakerCenter, gain, distance);
-			drive(minecraft, view, track, stereo[0], stereo[1]);
+			drive(minecraft, view, track, speakerCenter, sourceGain);
 		}
 
 		// speakers that vanished from the sync map
@@ -123,7 +123,7 @@ public final class AudioEngine {
 	}
 
 	private static void drive(Minecraft minecraft, ClientSpeakers.View view, Track track,
-			float left, float right) {
+			Vec3 centre, float gain) {
 		BlockPos pos = view.pos();
 		String key = playbackKey(view, track);
 		SpeakerPlayback playback = ACTIVE.get(pos);
@@ -136,17 +136,16 @@ public final class AudioEngine {
 		if (playback == null) {
 			if (recentlyFailed(key)) return;
 			playback = new SpeakerPlayback(pos, track, view.trackIndex(), key, view.positionMs(),
-					left, right,
 					() -> reportEnded(minecraft, pos, view.trackIndex()),
 					message -> reportError(minecraft, key, track, message));
 			ACTIVE.put(pos, playback);
 			PAUSED_SINCE.remove(pos);
-			return;
 		}
 
 		playback.setPaused(false);
 		PAUSED_SINCE.remove(pos);
-		playback.setGains(left, right);
+		// all OpenAL work happens here, on the client thread
+		playback.clientTick(centre, gain, view.range());
 
 		if (!playback.hasOutput()) return; // still opening — nothing to compare against yet
 		long drift = view.positionMs() - playback.positionMs();
@@ -160,7 +159,7 @@ public final class AudioEngine {
 	private static void pauseOrDrop(BlockPos pos) {
 		SpeakerPlayback playback = ACTIVE.get(pos);
 		if (playback == null) return;
-		playback.setPaused(true);
+		playback.pauseAudio();
 		long since = PAUSED_SINCE.computeIfAbsent(pos, key -> System.currentTimeMillis());
 		if (System.currentTimeMillis() - since > PAUSE_GRACE_MS) {
 			stop(pos);
@@ -194,34 +193,6 @@ public final class AudioEngine {
 		if (distance <= NEAR_FIELD) return 1.0f;
 		double t = (distance - NEAR_FIELD) / Math.max(1.0, range - NEAR_FIELD);
 		return (float) Math.pow(Math.max(0.0, 1.0 - t), 1.6);
-	}
-
-	private static float[] stereoGains(LocalPlayer player, Vec3 speaker, float gain, double distance) {
-		return stereoGains(speaker.x - player.getX(), speaker.z - player.getZ(),
-				player.getYRot(), gain, distance);
-	}
-
-	/**
-	 * Constant-power stereo placement: the speaker drifts to the ear it is on
-	 * relative to where the player is looking, and centres when standing on it.
-	 *
-	 * <p>Minecraft yaw 0 looks down +Z, so the listener's forward vector is
-	 * {@code (-sin yaw, cos yaw)} and their right is {@code (-cos yaw, -sin yaw)}.
-	 */
-	static float[] stereoGains(double dx, double dz, float yawDegrees, float gain, double distance) {
-		double flat = Math.sqrt(dx * dx + dz * dz);
-		if (flat < 0.001 || gain <= 0.0f) {
-			float centre = gain * 0.7071f;
-			return new float[] { centre, centre };
-		}
-		double yaw = Math.toRadians(yawDegrees);
-		double rightward = (-dx * Math.cos(yaw) - dz * Math.sin(yaw)) / flat;
-		// a speaker you're standing next to shouldn't swing hard left/right, and
-		// even one straight off to the side keeps a little in the far ear
-		double spread = Math.min(MAX_PAN, distance / 4.0 * MAX_PAN);
-		double pan = Math.max(-1.0, Math.min(1.0, rightward)) * spread;
-		double angle = (pan + 1.0) * Math.PI / 4.0;
-		return new float[] { (float) (gain * Math.cos(angle)), (float) (gain * Math.sin(angle)) };
 	}
 
 	// ------------------------------------------------------------- side effects

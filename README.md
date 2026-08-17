@@ -120,22 +120,15 @@ survive restarts. Tap any track to start the nearest speaker on it.
 > **Windows heads-up:** control goes through Windows' own media session system — no setup.
 > If the phone says "Spotify not found", just open Spotify once so it can be detected.
 
-### 🎚 Speaker setup (one minute, once)
+### 🎚 Speaker setup
 
-The speaker plays `.wav` out of the box. For **everything else — mp3, flac, m4a,
-opus, web links** — it needs `ffmpeg`, and **YouTube** additionally needs `yt-dlp`.
-These are only needed on the **clients that want to hear the audio**; your server
-never touches them.
+**None.** Since 2.0 the decoder is built into the mod — mp3, flac, m4a, opus, web
+links and YouTube all play out of the box, on every platform, with nothing to install.
 
-```bash
-brew install ffmpeg yt-dlp          # macOS
-winget install ffmpeg yt-dlp        # Windows
-sudo apt install ffmpeg yt-dlp      # Debian / Ubuntu
-```
-
-The mod finds them on your `PATH`, in the usual Homebrew/`/usr/local` spots, or
-in `<game dir>/lifeessentials/bin/` if you'd rather just drop the binaries there.
-The import screen and the speaker deck both show which ones were found.
+<sub>Versions before 2.0 needed `ffmpeg` on every listening machine, plus `yt-dlp` for
+YouTube. That path is still there as an automatic fallback if the built-in decoder
+can't start on your platform, but you shouldn't need it. Either way your **server**
+never decodes anything — it only ever says which track and how far in.</sub>
 
 Sharing a song from YouTube Music tacks a radio playlist onto the link; the mod
 treats that as the one song you meant, not a hundred-track import. Paste a real

@@ -17,6 +17,7 @@ import javax.sound.sampled.UnsupportedAudioFileException;
 
 import com.lifeessentials.LifeEssentials;
 import com.lifeessentials.music.Track;
+import com.lifeessentials.music.TrackSource;
 import com.lifeessentials.music.TrackUris;
 
 /** Turns a library {@link Track} into decoded PCM, seeked to the right offset. */
@@ -34,7 +35,26 @@ public final class AudioSources {
 	private AudioSources() {
 	}
 
+	/**
+	 * Opens a track, preferring the in-process engine.
+	 *
+	 * <p>LavaPlayer needs nothing installed and does a real seek, so it is always
+	 * the first choice. The ffmpeg/yt-dlp path below stays as a fallback for a
+	 * platform whose natives won't load — losing audio entirely because a decoder
+	 * didn't link is a much worse outcome than shelling out.
+	 */
 	public static PcmSource open(Track track, long startMs) throws OpenFailure {
+		if (track.source() == TrackSource.SPOTIFY) {
+			throw new OpenFailure("Spotify tracks play through the desktop app");
+		}
+		if (LavaEngine.isAvailable()) {
+			return LavaSource.open(track, startMs);
+		}
+		return openExternal(track, startMs);
+	}
+
+	/** The pre-2.0 path: ffmpeg for everything, plus yt-dlp for YouTube. */
+	private static PcmSource openExternal(Track track, long startMs) throws OpenFailure {
 		return switch (track.source()) {
 			case FILE -> openFile(track, startMs);
 			case URL -> openUrl(track.uri(), startMs);

@@ -79,6 +79,55 @@ whole playlist. A 30-minute backstop covers a track nobody can decode at all.
 **48 kHz, 16-bit, stereo, little-endian**, the one format everything normalises
 to, seeked to the right offset.
 
+Since 2.0 that decoding happens **in-process**, via LavaPlayer. `FILE`, `URL` and
+`YOUTUBE` all go through `LavaSource`; `SPOTIFY` is never decoded and is handed to
+the listener's desktop app as before.
+
+### The engine (`LavaEngine` / `LavaSource`)
+
+One `DefaultAudioPlayerManager` per client, output format
+`Pcm16AudioDataFormat(2, 48000, 960, false)` — deliberately identical to
+`PcmSource.FORMAT`, so nothing resamples on our side. `AudioPlayerInputStream`
+turns the player into an ordinary `AudioInputStream`, which is why `LavaSource`
+drops in behind the existing `PcmSource` interface and `SpeakerPlayback` did not
+have to change at all.
+
+What this bought over the old subprocess pipeline:
+
+- **Nothing to install.** Previously every listener needed ffmpeg, and YouTube
+  additionally needed yt-dlp, or they heard silence.
+- **Real seeking.** `AudioTrack#setPosition` seeks the container instead of
+  decoding and discarding everything up to the offset.
+- **No thundering herd.** A speaker starting a track no longer makes every client
+  in range spawn two processes and hit YouTube at the same instant.
+
+Measured on an M-series Mac against the shaded jar with no external tools present:
+~3.8 s to first audio (YouTube cipher solve plus the seek) and **~476× realtime**
+once running. That startup cost is exactly what `SpeakerPlayback#catchUp` already
+existed to absorb.
+
+`LavaEngine.manager()` returns `null` rather than throwing when it cannot start, and
+`AudioSources.open` then falls back to the ffmpeg path below — losing audio entirely
+because a native failed to link is a far worse outcome than shelling out.
+
+> **Do not relocate `com.sedmelluq.discord.lavaplayer.natives`.** JNI symbol names are
+> mangled from the Java class name, so `libconnector` exports
+> `Java_com_sedmelluq_discord_lavaplayer_natives_…`. Shading that package renames the
+> lookup and every native call dies with `UnsatisfiedLinkError`. `build.gradle`
+> relocates all of LavaPlayer *except* that one package; Iam Music Player ships the
+> identical split for the identical reason.
+>
+> Two more shading facts: httpclient is pinned to **4.5.13** because Minecraft declares
+> that version `strictly` and LavaPlayer's requested 4.5.14 cannot co-resolve with it;
+> and slf4j is *excluded* rather than relocated, because Minecraft already provides it.
+
+Dev runs do not use the shaded jar, and ModDevGradle builds a run's classpath from its
+own `additionalRuntimeClasspath` configuration rather than from `runtimeClasspath`. If
+`runClient` boots and then throws `NoClassDefFoundError` on a LavaPlayer class, that
+configuration is what's missing — compiling against the dependency is not enough.
+
+### The fallback path
+
 | Source | Path |
 | :-- | :-- |
 | `FILE` | ffmpeg on the file; falls back to `javax.sound` for `.wav` |
@@ -145,24 +194,48 @@ report "Invalid data found", which sends you hunting in entirely the wrong place
 
 ## 3. Mixing and placement
 
-`SpeakerPlayback` runs one daemon thread per audible speaker. The game thread
-only ever writes two volatile gain fields, so a stalled network stream can never
-hitch the render loop.
+Since 2.0 the speaker is an **OpenAL source in Minecraft's own context**
+(`AlSpeakerSource`), positioned at the block. It is not mixed by us at all.
 
-- **Attenuation** — full volume within 2 blocks, then a smooth roll-off to the
-  speaker's configured range.
-- **Panning** — constant-power stereo placement from the listener's facing.
-  Minecraft yaw 0 looks down `+Z`, so forward is `(-sin yaw, cos yaw)` and the
-  listener's right is `(-cos yaw, -sin yaw)`. Panning is capped at 0.75 so a
-  speaker off to one side still leaves signal in the far ear.
-- **Gain ramping** — gains interpolate across each chunk rather than snapping, so
-  walking around a speaker doesn't produce zipper noise.
-- **Ducking** — `AudioEngine.audibleGain()` feeds `MusicClientState`, which drives
-  the existing `VolumeDucker`. Game audio ducks under the speaker exactly as it
-  already did under phone music.
+Before, playback opened a `javax.sound.sampled` line — a second, separate audio
+device that bypassed Minecraft's mixer. Everything spatial therefore had to be
+faked: distance roll-off by hand, and stereo panning computed from the player's
+yaw, with a cap so a speaker off to one side kept some signal in the far ear.
+All of that is deleted. What replaced it:
 
-`stereoGains(dx, dz, yaw, gain, distance)` is package-visible specifically so the
-geometry can be tested without a running game.
+- **Attenuation and panning** — OpenAL, against the listener transform the game
+  already maintains. `AL_LINEAR_DISTANCE` with `AL_MAX_DISTANCE` set to the
+  speaker's range, `AL_ROLLOFF_FACTOR` 1 and `AL_REFERENCE_DISTANCE` 0 — the
+  identical settings vanilla uses in `Channel#linearAttenuation`, so the speaker
+  falls off like any other block sound. Per-source distance models need
+  `AL_SOFT_source_distance_model`, which Minecraft enables when it starts its
+  sound library.
+- **Occlusion and reverb** — free, and the real prize. Mods that hook OpenAL
+  sources (Sound Physics Remastered) now treat the speaker as a world sound, so
+  it muffles through walls and echoes in caves. The old line could never do this.
+- **Ducking** — unchanged in behaviour. `AudioEngine.audibleGain()` still feeds
+  `VolumeDucker`, but it now computes the *perceived* loudness itself (source gain
+  × distance attenuation) purely for the duck, because the gain handed to OpenAL is
+  the undistanced one.
+
+### Threading
+
+OpenAL is not thread-safe and the context is shared with the game, so the rule is:
+**every AL call happens on the client thread.** `SpeakerPlayback` is split to honour
+that — a daemon thread only decodes, and hands finished byte arrays to a bounded
+`ArrayBlockingQueue`; `clientTick` drains that queue into AL buffers, recycles
+whatever the hardware finished with, and updates position and gain.
+
+The queue bound is load-bearing in a way it wasn't before: LavaPlayer decodes
+hundreds of times faster than realtime, so without back-pressure it would buffer an
+entire song into memory in a second or two. The decode thread blocks on `offer`.
+
+Two consequences to keep in mind when changing this:
+
+- A paused speaker never reaches `clientTick`, so `pauseAudio()` exists to stop the
+  source explicitly. Forget it and a paused speaker keeps playing what is queued.
+- Position now comes from the hardware — buffers retired plus `AL_SAMPLE_OFFSET`
+  into what is still queued — rather than from bytes written to a line.
 
 ---
 

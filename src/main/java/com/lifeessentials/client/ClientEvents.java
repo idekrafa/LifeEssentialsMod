@@ -5,6 +5,7 @@ import java.util.concurrent.CompletableFuture;
 import com.lifeessentials.LifeEssentials;
 import com.lifeessentials.ModItems;
 import com.lifeessentials.client.audio.AudioEngine;
+import com.lifeessentials.client.audio.LavaEngine;
 import com.lifeessentials.client.audio.MediaTools;
 import com.lifeessentials.client.audio.MusicFolder;
 import com.lifeessentials.client.music.MusicClientState;
@@ -37,6 +38,11 @@ public final class ClientEvents {
 
 	@SubscribeEvent
 	public static void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
+		// Building the player manager links LavaPlayer's natives, which costs a
+		// beat and can fail. Doing it here means the first track doesn't pay for
+		// it, and a platform that can't load them says so in the log at join time
+		// rather than as silence three seconds into a song.
+		CompletableFuture.runAsync(LavaEngine::isAvailable);
 		MediaTools.probeAsync();
 		CompletableFuture.runAsync(MusicFolder::ensureExists); // don't touch disk on the render thread
 		ClientNet.send(MusicPayloads.LibraryRequestC2S.INSTANCE);

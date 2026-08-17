@@ -1,38 +1,39 @@
 package com.lifeessentials.client.audio;
 
 import java.io.IOException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.SourceDataLine;
 
 import com.lifeessentials.LifeEssentials;
 import com.lifeessentials.music.Track;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * One track playing out of one speaker on this client.
  *
- * <p>Decoding and mixing happen on a dedicated daemon thread; the game thread
- * only ever writes the two volatile gain fields, so a stalling network stream
- * can never hitch the render loop.
+ * <p>Split across two threads on purpose:
+ *
+ * <ul>
+ *   <li>a daemon thread decodes and does nothing else, so a stalled network
+ *       stream can never hitch the render loop;
+ *   <li>the client thread moves finished bytes into OpenAL, because OpenAL is
+ *       not thread-safe and Minecraft shares one context.
+ * </ul>
+ *
+ * <p>The two meet at {@link #chunks}, a bounded queue — bounded so a fast decoder
+ * (LavaPlayer runs hundreds of times faster than realtime) can't run away and
+ * buffer the whole song in memory.
  */
 public final class SpeakerPlayback {
-	/** A quarter second of audio buffered in the mixer. */
-	private static final int LINE_BUFFER_BYTES = PcmSource.BYTES_PER_SECOND / 4;
-	private static final int CHUNK_BYTES = 8192;
+	/** A quarter second of audio per chunk. */
+	private static final int CHUNK_BYTES = PcmSource.BYTES_PER_SECOND / 4;
+	/** Roughly four seconds decoded ahead of what OpenAL holds. */
+	private static final int MAX_CHUNKS = 16;
 	/** Don't bother compensating for an open faster than this. */
 	private static final long CATCH_UP_THRESHOLD_MS = 250;
-	/**
-	 * Retries when a stream opens but yields nothing. YouTube throttles bursts of
-	 * requests with a 403, and a speaker starting up asks every listener in range
-	 * to fetch the same track at the same moment — so a couple of spaced retries
-	 * are the difference between "it works" and "it randomly doesn't".
-	 */
-	private static final int MAX_ATTEMPTS = 3;
-	/** Long enough for YouTube's throttle to let go; short enough to still feel live. */
-	private static final long RETRY_DELAY_MS = 3000;
 	/** Never burn more than a minute of audio catching up. */
 	private static final long MAX_CATCH_UP_BYTES = 60L * PcmSource.BYTES_PER_SECOND;
 
@@ -40,34 +41,30 @@ public final class SpeakerPlayback {
 	private final Track track;
 	private final int trackIndex;
 	private final String key;
-	/** Where playback actually begins, raised to cover a slow open. */
-	private volatile long startOffsetMs;
 	private final Runnable onEnded;
 	private final Consumer<String> onError;
 
-	private volatile float targetLeft;
-	private volatile float targetRight;
+	/** Where playback actually begins, raised to cover a slow open. */
+	private volatile long startOffsetMs;
 	private volatile boolean paused;
 	private volatile boolean cancelled;
-	private volatile boolean done;
-	private volatile long framesWritten;
-	private volatile SourceDataLine line;
+	private volatile boolean decoderFinished;
+	private volatile boolean reportedEnd;
+	private volatile boolean producedAudio;
 	private volatile PcmSource source;
 
-	private float currentLeft;
-	private float currentRight;
+	private final BlockingQueue<byte[]> chunks = new ArrayBlockingQueue<>(MAX_CHUNKS);
+
+	/** Client thread only. */
+	private AlSpeakerSource al;
 
 	public SpeakerPlayback(BlockPos pos, Track track, int trackIndex, String key, long startOffsetMs,
-			float initialLeft, float initialRight, Runnable onEnded, Consumer<String> onError) {
+			Runnable onEnded, Consumer<String> onError) {
 		this.pos = pos;
 		this.track = track;
 		this.trackIndex = trackIndex;
 		this.key = key;
 		this.startOffsetMs = Math.max(0, startOffsetMs);
-		this.targetLeft = initialLeft;
-		this.targetRight = initialRight;
-		this.currentLeft = initialLeft;
-		this.currentRight = initialRight;
 		this.onEnded = onEnded;
 		this.onError = onError;
 
@@ -76,7 +73,7 @@ public final class SpeakerPlayback {
 		thread.start();
 	}
 
-	// ------------------------------------------------------------- game thread
+	// ------------------------------------------------------------ client thread
 
 	public String key() {
 		return key;
@@ -90,138 +87,125 @@ public final class SpeakerPlayback {
 		return pos;
 	}
 
-	public boolean isDone() {
-		return done;
-	}
-
 	public boolean isPaused() {
 		return paused;
 	}
 
-	/** True once real audio has reached the mixer — before that, drift is meaningless. */
-	public boolean hasOutput() {
-		return framesWritten > 0;
+	/**
+	 * Finished once the decoder is done and the queued audio has drained.
+	 *
+	 * <p>The {@code !producedAudio} arm matters: a decoder that failed without ever
+	 * yielding a sample will never reach the end-of-track report, and without this
+	 * the slot would be held forever.
+	 */
+	public boolean isDone() {
+		return cancelled || (decoderFinished && chunks.isEmpty() && (reportedEnd || !producedAudio));
 	}
 
-	public void setGains(float left, float right) {
-		targetLeft = left;
-		targetRight = right;
+	public boolean hasOutput() {
+		return al != null && al.hasOutput();
 	}
 
 	public void setPaused(boolean value) {
 		paused = value;
 	}
 
-	public void stop() {
-		cancelled = true;
-		SourceDataLine current = line;
-		if (current != null) {
-			// unblocks a write that is waiting on a full buffer
-			current.flush();
-			current.stop();
+	/**
+	 * Moves decoded audio into OpenAL and keeps the source where the block is.
+	 *
+	 * <p>Must run on the client thread. Called once per tick per audible speaker.
+	 */
+	public void clientTick(Vec3 centre, float gain, int range) {
+		if (cancelled) return;
+		if (al == null) al = new AlSpeakerSource();
+
+		al.reclaim();
+		while (al.hasRoom()) {
+			byte[] chunk = chunks.poll();
+			if (chunk == null) break;
+			al.enqueue(chunk, chunk.length);
 		}
-		// and a read that is waiting on a stalled network stream
-		PcmSource currentSource = source;
-		if (currentSource != null) {
-			currentSource.close();
+		al.place(centre, gain, range);
+
+		if (paused) {
+			al.pause();
+			return;
 		}
+		al.play();
+
+		if (decoderFinished && chunks.isEmpty() && !reportedEnd && al.playedFrames() > 0) {
+			reportedEnd = true;
+			onEnded.run();
+		}
+	}
+
+	/**
+	 * Client thread: silences the source without tearing the decoder down.
+	 *
+	 * <p>A paused speaker never reaches {@link #clientTick}, so the OpenAL source
+	 * has to be stopped explicitly or it would keep playing what is still queued.
+	 */
+	public void pauseAudio() {
+		paused = true;
+		if (al != null) al.pause();
 	}
 
 	/** Milliseconds of the track the listener has actually heard by now. */
 	public long positionMs() {
-		SourceDataLine current = line;
-		long played = framesWritten;
-		if (current != null) {
-			int buffered = current.getBufferSize() - current.available();
-			played -= Math.max(0, buffered) / PcmSource.BYTES_PER_FRAME;
+		if (al == null) return startOffsetMs;
+		return startOffsetMs + al.playedFrames() * 1000L / PcmSource.FRAMES_PER_SECOND;
+	}
+
+	/** Client thread: tears down the decoder and releases the OpenAL source. */
+	public void stop() {
+		cancelled = true;
+		PcmSource current = source;
+		if (current != null) current.close(); // unblocks a read on a stalled stream
+		chunks.clear();
+		if (al != null) {
+			al.destroy();
+			al = null;
 		}
-		return startOffsetMs + Math.max(0, played) * 1000L / PcmSource.FRAMES_PER_SECOND;
 	}
 
 	// ------------------------------------------------------------ audio thread
 
-	/**
-	 * YouTube hands out stream urls that occasionally come back 403 — a stale
-	 * url, or simply several listeners resolving the same track at once. One
-	 * retry re-resolves from scratch, which clears it.
-	 */
 	private void run() {
-		for (int attempt = 1; attempt <= MAX_ATTEMPTS && !cancelled; attempt++) {
-			if (attemptPlayback(attempt == MAX_ATTEMPTS)) return;
-			sleep(RETRY_DELAY_MS);
-		}
-	}
-
-	/** Returns true when the attempt is final — played, cancelled, or reported. */
-	private boolean attemptPlayback(boolean lastAttempt) {
 		PcmSource opening = null;
-		SourceDataLine opened = null;
 		try {
 			long openBegan = System.currentTimeMillis();
 			opening = AudioSources.open(track, startOffsetMs);
 			source = opening;
-			if (cancelled) return true;
-			// Resolving a YouTube url or spinning up ffmpeg can take seconds, and the
-			// rest of the room didn't wait. Throw away the audio we were meant to have
-			// played during the open so we come in level with everyone else, instead of
-			// starting late and being yanked back by the drift check forever.
+			if (cancelled) return;
 			catchUp(opening, openBegan);
-			if (cancelled) return true;
-			opened = AudioSystem.getSourceDataLine(PcmSource.FORMAT);
-			opened.open(PcmSource.FORMAT, LINE_BUFFER_BYTES);
-			opened.start();
-			line = opened;
-			pump(opening, opened);
-			if (cancelled) return true;
-			if (framesWritten == 0) {
-				// the decoder exited without ever handing us audio; its own
-				// complaint is far more useful than "the track ended"
-				if (!lastAttempt) return false;
-				String why = opening.diagnostics();
-				onError.accept(why.isEmpty() ? "the decoder produced no audio" : why);
-				return true;
-			}
-			opened.drain();
-			onEnded.run();
-			return true;
+			if (cancelled) return;
+			pump(opening);
 		} catch (AudioSources.OpenFailure e) {
-			// a missing tool or a bad file won't fix itself on a retry
 			onError.accept(e.getMessage());
-			return true;
-		} catch (LineUnavailableException e) {
-			onError.accept("No audio device available for the speaker");
-			return true;
 		} catch (IOException e) {
-			if (cancelled) return true;
-			if (!lastAttempt && framesWritten == 0) return false;
-			onError.accept("The stream for \"" + track.displayTitle() + "\" dropped");
-			return true;
+			if (!cancelled) onError.accept("The stream for \"" + track.displayTitle() + "\" dropped");
 		} catch (Exception e) {
 			LifeEssentials.LOGGER.warn("Speaker playback failed at {}", pos, e);
 			if (!cancelled) onError.accept("Playback failed — see the log");
-			return true;
 		} finally {
-			line = null;
+			decoderFinished = true;
 			source = null;
-			if (opened != null) {
-				opened.stop();
-				opened.close();
-			}
-			if (opening != null) opening.close();
-			// only give up the slot once no further attempt is coming
-			if (cancelled || lastAttempt || framesWritten > 0) {
-				done = true;
+			if (opening != null) {
+				String why = opening.diagnostics();
+				if (!cancelled && !why.isEmpty() && !producedAudio) {
+					onError.accept(why);
+				}
+				opening.close();
 			}
 		}
 	}
 
 	/**
-	 * Discards however much audio elapsed while the stream was opening, so we
-	 * come in level with the listeners who were already playing.
+	 * Discards however much audio elapsed while the stream was opening, so we come
+	 * in level with the listeners who were already playing.
 	 *
-	 * <p>The target is recomputed every pass rather than fixed up front: with a
-	 * piped source ffmpeg emits nothing until it has decoded up to the seek
-	 * point, so most of the delay lands on the first read, not on the open. This
+	 * <p>The target is recomputed every pass rather than fixed up front, because
+	 * most of the delay lands on the first read rather than on the open. It
 	 * converges because decoding outruns realtime by a wide margin.
 	 */
 	private void catchUp(PcmSource source, long openBegan) throws IOException {
@@ -233,79 +217,47 @@ public final class SpeakerPlayback {
 			if (behindMs < CATCH_UP_THRESHOLD_MS) break;
 			long want = Math.min(scratch.length, behindMs * PcmSource.BYTES_PER_SECOND / 1000);
 			int read = source.read(scratch, 0, (int) Math.max(PcmSource.BYTES_PER_FRAME, want));
-			if (read < 0) break; // track is shorter than the seek point
+			if (read < 0) return; // track is shorter than the seek point
 			discarded += read;
 		}
 		startOffsetMs += discarded * 1000L / PcmSource.BYTES_PER_SECOND;
 	}
 
-	private void pump(PcmSource source, SourceDataLine out) throws IOException {
-		byte[] input = new byte[CHUNK_BYTES];
-		byte[] mixed = new byte[CHUNK_BYTES];
-		int carry = 0;
-
+	/** Reads whole chunks and hands them to the client thread. */
+	private void pump(PcmSource source) throws IOException {
+		byte[] chunk = new byte[CHUNK_BYTES];
+		int filled = 0;
 		while (!cancelled) {
-			if (paused) {
-				if (out.isRunning()) out.stop();
-				sleep(40);
-				continue;
+			int read = source.read(chunk, filled, chunk.length - filled);
+			if (read < 0) {
+				if (filled > 0) offer(trim(chunk, filled));
+				return;
 			}
-			if (!out.isRunning()) out.start();
-
-			int read = source.read(input, carry, input.length - carry);
-			if (read < 0) return;
-			int available = carry + read;
-			int usable = available - available % PcmSource.BYTES_PER_FRAME;
-			if (usable > 0) {
-				applyGain(input, mixed, usable);
-				out.write(mixed, 0, usable);
-				framesWritten += usable / PcmSource.BYTES_PER_FRAME;
-			}
-			carry = available - usable;
-			if (carry > 0) {
-				System.arraycopy(input, usable, input, 0, carry);
+			filled += read;
+			if (filled == chunk.length) {
+				offer(chunk.clone());
+				producedAudio = true;
+				filled = 0;
 			}
 		}
 	}
 
-	/** Ramps from the previous gains to the current targets across the chunk. */
-	private void applyGain(byte[] in, byte[] out, int length) {
-		float endLeft = targetLeft;
-		float endRight = targetRight;
-		int frames = length / PcmSource.BYTES_PER_FRAME;
-		float stepLeft = frames == 0 ? 0 : (endLeft - currentLeft) / frames;
-		float stepRight = frames == 0 ? 0 : (endRight - currentRight) / frames;
-		float gainLeft = currentLeft;
-		float gainRight = currentRight;
-
-		for (int frame = 0; frame < frames; frame++) {
-			int i = frame * PcmSource.BYTES_PER_FRAME;
-			short left = (short) ((in[i] & 0xFF) | (in[i + 1] << 8));
-			short right = (short) ((in[i + 2] & 0xFF) | (in[i + 3] << 8));
-			int scaledLeft = clamp((int) (left * gainLeft));
-			int scaledRight = clamp((int) (right * gainRight));
-			out[i] = (byte) (scaledLeft & 0xFF);
-			out[i + 1] = (byte) ((scaledLeft >> 8) & 0xFF);
-			out[i + 2] = (byte) (scaledRight & 0xFF);
-			out[i + 3] = (byte) ((scaledRight >> 8) & 0xFF);
-			gainLeft += stepLeft;
-			gainRight += stepRight;
-		}
-		currentLeft = endLeft;
-		currentRight = endRight;
+	private static byte[] trim(byte[] chunk, int filled) {
+		int usable = filled - filled % PcmSource.BYTES_PER_FRAME;
+		byte[] copy = new byte[usable];
+		System.arraycopy(chunk, 0, copy, 0, usable);
+		return copy;
 	}
 
-	private static int clamp(int sample) {
-		if (sample > Short.MAX_VALUE) return Short.MAX_VALUE;
-		if (sample < Short.MIN_VALUE) return Short.MIN_VALUE;
-		return sample;
-	}
-
-	private static void sleep(long millis) {
-		try {
-			Thread.sleep(millis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
+	/** Blocks while the queue is full — that back-pressure is what paces decoding. */
+	private void offer(byte[] chunk) {
+		while (!cancelled) {
+			try {
+				if (chunks.offer(chunk, 200, TimeUnit.MILLISECONDS)) return;
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			}
 		}
 	}
 }

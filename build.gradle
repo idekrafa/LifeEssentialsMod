@@ -1,5 +1,6 @@
 plugins {
 	id 'net.neoforged.moddev' version '2.0.144'
+	id 'com.gradleup.shadow' version '8.3.6'
 }
 
 version = project.mod_version
@@ -12,6 +13,41 @@ base {
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+	maven {
+		name = 'Lavalink'
+		url = 'https://maven.lavalink.dev/releases'
+		content { includeGroup 'dev.lavalink.youtube' }
+	}
+}
+
+configurations {
+	// everything in here is compiled against and shaded into the final jar
+	shade
+	implementation.extendsFrom shade
+}
+
+dependencies {
+	// The audio engine. In-process decoding, so a listener needs no ffmpeg/yt-dlp.
+	shade("dev.arbjerg:lavaplayer:${project.lavaplayer_version}") {
+		// Minecraft already provides slf4j; bundling a second copy breaks logging
+		exclude group: 'org.slf4j'
+		exclude group: 'org.jetbrains', module: 'annotations'
+		// LavaPlayer asks for httpclient 4.5.14, but Minecraft pins 4.5.13 *strictly*,
+		// so the two cannot co-resolve. Pinned to Minecraft's version just below —
+		// the difference is a patch release and LavaPlayer uses nothing from it.
+		exclude group: 'org.apache.httpcomponents'
+	}
+	shade 'org.apache.httpcomponents:httpclient:4.5.13'
+	shade 'org.apache.httpcomponents:httpcore:4.4.16'
+	// LavaPlayer's built-in YouTube manager is unmaintained; this is the live one.
+	shade("dev.lavalink.youtube:v2:${project.youtube_source_version}") {
+		exclude group: 'org.slf4j'
+		exclude group: 'org.jetbrains', module: 'annotations'
 	}
 }
 
@@ -35,7 +71,69 @@ neoForge {
 }
 
 jar {
+	// the shaded jar is the deliverable; this one is just an input to it
+	archiveClassifier = 'slim'
+}
+
+/**
+ * Relocation notes — the non-obvious parts:
+ *
+ *  - `com.sedmelluq.discord.lavaplayer.natives` is deliberately NOT relocated.
+ *    JNI symbol names are mangled from the Java class name, so libconnector
+ *    exports `Java_com_sedmelluq_discord_lavaplayer_natives_...`. Move those
+ *    classes and every native call dies with UnsatisfiedLinkError. Iam Music
+ *    Player ships the same split for the same reason.
+ *  - slf4j is excluded rather than relocated: Minecraft provides it, and a
+ *    relocated copy would silently swallow LavaPlayer's own logging.
+ */
+shadowJar {
+	configurations = [project.configurations.shade]
+	archiveClassifier = ''
+
+	def shaded = 'com.lifeessentials.include'
+	relocate('com.sedmelluq', "${shaded}.com.sedmelluq") {
+		exclude 'com.sedmelluq.discord.lavaplayer.natives.**'
+	}
+	relocate 'dev.lavalink.youtube', "${shaded}.dev.lavalink.youtube"
+	relocate 'org.apache.http', "${shaded}.org.apache.http"
+	relocate 'org.apache.commons', "${shaded}.org.apache.commons"
+	relocate 'com.fasterxml.jackson', "${shaded}.com.fasterxml.jackson"
+	relocate 'org.mozilla', "${shaded}.org.mozilla"
+	relocate 'org.jsoup', "${shaded}.org.jsoup"
+	relocate 'org.json', "${shaded}.org.json"
+	relocate 'com.grack.nanojson', "${shaded}.com.grack.nanojson"
+	relocate 'net.iharder', "${shaded}.net.iharder"
+
+	mergeServiceFiles()
+	exclude 'META-INF/*.SF'
+	exclude 'META-INF/*.DSA'
+	exclude 'META-INF/*.RSA'
+	exclude 'module-info.class'
+	exclude 'META-INF/versions/*/module-info.class'
+
 	from("LICENSE") {
 		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+}
+
+tasks.named('build') {
+	dependsOn tasks.named('shadowJar')
+}
+
+/*
+ * Dev runs don't use the shaded jar, and ModDevGradle builds a run's classpath from
+ * its own `additionalRuntimeClasspath` rather than from `runtimeClasspath` — so
+ * without this, `runClient` starts fine and then dies with NoClassDefFoundError the
+ * moment anything touches LavaPlayer. Compiling against it is not enough.
+ */
+configurations.named('additionalRuntimeClasspath') {
+	extendsFrom configurations.shade
+}
+
+/* Keep the version the mod reports in step with the one Gradle builds. */
+processResources {
+	inputs.property 'version', project.version
+	filesMatching('META-INF/neoforge.mods.toml') {
+		expand 'version': project.version
 	}
 }
