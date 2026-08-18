@@ -125,6 +125,27 @@ because a native failed to link is a far worse outcome than shelling out.
 > to start. There is no build-side escape: relocating them breaks JNI, and not
 > relocating them collides. Only one such mod can be installed at a time.
 >
+> **Borrowing the other mod's copy does not work either** — this was tried. Dropping
+> the package from our jar clears the module conflict (verified: zero overlapping
+> packages), but their JNI classes are welded to *their* relocated hierarchy:
+>
+> ```
+> ours: OpusDecoder extends com.sedmelluq.lava.common.natives.NativeResourceHolder
+> IMP:  OpusDecoder extends dev.felnull.imp.include.…lava.common.natives.NativeResourceHolder
+> ```
+>
+> 14 of the 21 JNI classes match on signature; the 7 that touch the base class do
+> not. Linking against them yields `IncompatibleClassChangeError`, which `LavaEngine`
+> catches and turns into a silent fallback to ffmpeg — the worst outcome, since
+> nobody has ffmpeg installed any more.
+>
+> The remaining real fix is to stop shipping LavaPlayer as *classes* at all: embed
+> the jars as resources (resources declare no packages, so no module conflict),
+> extract them at runtime, and load them in a child `URLClassLoader` whose parent is
+> the mod's own loader. Class names stay original so JNI resolves, and the native
+> binary must extract to a directory distinct from the other mod's or `System.load`
+> refuses the second copy.
+>
 > Two more shading facts: httpclient is pinned to **4.5.13** because Minecraft declares
 > that version `strictly` and LavaPlayer's requested 4.5.14 cannot co-resolve with it;
 > and slf4j is *excluded* rather than relocated, because Minecraft already provides it.
