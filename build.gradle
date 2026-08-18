@@ -70,9 +70,18 @@ neoForge {
 	}
 }
 
+/*
+ * The plain jar carries a valid neoforge.mods.toml but none of LavaPlayer, so a
+ * loader will happily start it and then die with NoClassDefFoundError the moment
+ * anything touches the audio engine. Leaving it in build/libs next to the real
+ * jar is a trap — somebody copies both into a mods folder and the pack crashes.
+ *
+ * So it goes somewhere else entirely: build/libs contains exactly one jar, and
+ * that jar is the one you install.
+ */
 jar {
-	// the shaded jar is the deliverable; this one is just an input to it
 	archiveClassifier = 'slim'
+	destinationDirectory = layout.buildDirectory.dir('devlibs')
 }
 
 /**
