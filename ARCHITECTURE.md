@@ -117,6 +117,14 @@ because a native failed to link is a far worse outcome than shelling out.
 > relocates all of LavaPlayer *except* that one package; Iam Music Player ships the
 > identical split for the identical reason.
 >
+> **That makes us mutually exclusive with Iam Music Player, and with any other mod
+> that bundles LavaPlayer the same way.** NeoForge builds each mod jar as a JPMS
+> module, and two modules exporting the same package is a hard resolution failure —
+> not a first-one-wins classloader situation. The seven
+> `com.sedmelluq.discord.lavaplayer.natives.*` packages collide and the game refuses
+> to start. There is no build-side escape: relocating them breaks JNI, and not
+> relocating them collides. Only one such mod can be installed at a time.
+>
 > Two more shading facts: httpclient is pinned to **4.5.13** because Minecraft declares
 > that version `strictly` and LavaPlayer's requested 4.5.14 cannot co-resolve with it;
 > and slf4j is *excluded* rather than relocated, because Minecraft already provides it.
