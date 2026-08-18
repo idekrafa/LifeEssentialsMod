@@ -58,10 +58,32 @@ public final class AudioSources {
 		if (track.source() == TrackSource.SPOTIFY) {
 			throw new OpenFailure("Spotify tracks play through the desktop app");
 		}
-		if (LavaEngine.isAvailable()) {
-			return LavaSource.open(track, startMs);
+		AudioBackend backend = BackendLoader.backend();
+		if (backend != null) {
+			try {
+				return backend.open(identifierFor(track), startMs);
+			} catch (BackendFailure e) {
+				throw new OpenFailure(e.getMessage());
+			}
 		}
 		return openExternal(track, startMs);
+	}
+
+	/** Turns a library {@link Track} into something the engine can resolve. */
+	private static String identifierFor(Track track) throws OpenFailure {
+		return switch (track.source()) {
+			case YOUTUBE -> "https://www.youtube.com/watch?v=" + track.uri();
+			case URL -> track.uri();
+			case FILE -> {
+				Path path = MusicFolder.resolve(track.uri());
+				if (path == null) {
+					throw new OpenFailure("\"" + track.uri() + "\" isn't in your "
+							+ MusicFolder.FOLDER_NAME + " folder");
+				}
+				yield path.toAbsolutePath().toString();
+			}
+			case SPOTIFY -> throw new OpenFailure("Spotify tracks play through the desktop app");
+		};
 	}
 
 	/** The pre-2.0 path: ffmpeg for everything, plus yt-dlp for YouTube. */

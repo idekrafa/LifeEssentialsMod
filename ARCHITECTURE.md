@@ -139,12 +139,42 @@ because a native failed to link is a far worse outcome than shelling out.
 > catches and turns into a silent fallback to ffmpeg — the worst outcome, since
 > nobody has ffmpeg installed any more.
 >
-> The remaining real fix is to stop shipping LavaPlayer as *classes* at all: embed
-> the jars as resources (resources declare no packages, so no module conflict),
-> extract them at runtime, and load them in a child `URLClassLoader` whose parent is
-> the mod's own loader. Class names stay original so JNI resolves, and the native
-> binary must extract to a directory distinct from the other mod's or `System.load`
-> refuses the second copy.
+> **This is what the mod now does.** LavaPlayer is not in this jar as classes at
+> all — see below.
+
+### Loading the engine in isolation
+
+The engine ships as **jars**, under `lifeessentials/lib/`. Resources declare no
+packages, so the module system has nothing to collide on: the mod jar contains only
+`com.lifeessentials.**` and coexists with anything.
+
+`BackendLoader` unpacks those jars to `<game dir>/lifeessentials/lib/` — a
+classloader cannot read a jar nested inside another jar — and loads them in a child
+`URLClassLoader` whose parent is the mod's own loader. Class names stay original, so
+JNI symbol lookup resolves.
+
+Three details that are load-bearing:
+
+- **The loader is parent-last for the engine.** Ordinary delegation asks the parent
+  first, and on a server running another LavaPlayer mod the parent *has* an answer —
+  that mod's copy, welded to its own relocated base classes. Taking it throws
+  `IncompatibleClassChangeError` mid-decode. Everything except the JDK,
+  `com.lifeessentials.client.audio`, slf4j/log4j and Minecraft is loaded child-first.
+- **`com.lifeessentials.client.audio` must stay parent-first.** Both sides have to
+  agree on `AudioBackend` and `PcmSource`; resolving them twice would give two
+  incompatible copies of the same interface and the cast across the boundary fails.
+- **Natives extract to our own directory** (`lavaplayer.native.dir`). Another mod
+  `System.load`-ing the same file path from a different classloader is an
+  `UnsatisfiedLinkError`.
+
+`AudioBackend` is the whole boundary, and everything crossing it is a JDK type or
+`PcmSource`. Nothing in the mod imports a LavaPlayer type. **Keep it that way** —
+the moment something does, the mod jar carries those packages again and the
+isolation is undone.
+
+Verified end-to-end against the built jar with no Minecraft involved: unpack →
+child loader → `LavaBackend` → cast to `AudioBackend` → resolve → decode. ~400×
+realtime, ~5 s to first audio.
 >
 > Two more shading facts: httpclient is pinned to **4.5.13** because Minecraft declares
 > that version `strictly` and LavaPlayer's requested 4.5.14 cannot co-resolve with it;

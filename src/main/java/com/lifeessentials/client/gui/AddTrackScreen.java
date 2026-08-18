@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import com.lifeessentials.client.ClientNet;
-import com.lifeessentials.client.audio.LavaEngine;
+import com.lifeessentials.client.audio.BackendLoader;
 import com.lifeessentials.client.audio.MediaTools;
 import com.lifeessentials.client.audio.MusicFolder;
 import com.lifeessentials.client.audio.TrackImporter;
@@ -121,7 +121,7 @@ public class AddTrackScreen extends PhoneUiScreen {
 		}
 		// only worth a line when the built-in decoder isn't running and the
 		// external tools actually matter again
-		if (!LavaEngine.isReady()) {
+		if (!BackendLoader.isReady()) {
 			graphics.drawString(this.font, trim(MediaTools.status(), screenW - 8),
 					screenX + 4, screenY + Y_DECODERS, COL_MUTED, false);
 		}
