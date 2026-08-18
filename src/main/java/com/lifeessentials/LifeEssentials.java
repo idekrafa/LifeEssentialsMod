@@ -13,6 +13,8 @@ public class LifeEssentials {
 
 	public LifeEssentials(IEventBus modEventBus) {
 		ModComponents.COMPONENTS.register(modEventBus);
+		ModBlocks.BLOCKS.register(modEventBus);
+		ModBlocks.BLOCK_ENTITIES.register(modEventBus);
 		ModItems.ITEMS.register(modEventBus);
 		ModItems.TABS.register(modEventBus);
 		modEventBus.addListener(ModPayloads::register);

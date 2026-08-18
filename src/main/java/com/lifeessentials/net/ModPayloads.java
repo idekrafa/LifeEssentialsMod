@@ -176,5 +176,7 @@ public final class ModPayloads {
 				(payload, context) -> ClientPayloadHandler.handleNearbyMusic(payload));
 		registrar.playToClient(AirpodsSyncS2C.TYPE, AirpodsSyncS2C.CODEC,
 				(payload, context) -> ClientPayloadHandler.handleAirpodsSync(payload));
+
+		MusicPayloads.register(registrar);
 	}
 }

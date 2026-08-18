@@ -4,6 +4,7 @@ import java.util.Set;
 
 import com.lifeessentials.ModItems;
 import com.lifeessentials.client.ClientNet;
+import com.lifeessentials.client.audio.AudioEngine;
 import com.lifeessentials.client.gui.MusicAppScreen;
 import com.lifeessentials.client.sound.VolumeDucker;
 import com.lifeessentials.net.ModPayloads;
@@ -72,11 +73,17 @@ public final class MusicClientState {
 
 	private static void applyDucking() {
 		NowPlaying np = controller().nowPlaying();
+		float loudness = 0.0f;
+		if (sessionActive && np.playing()) {
+			loudness = volume / 100.0f;
+		}
+		// a JBL speaker playing next to you ducks the game just like the phone does
+		loudness = Math.max(loudness, AudioEngine.audibleGain());
+
 		float general = 1.0f;
 		float music = 1.0f;
-		if (sessionActive && np.playing()) {
-			float v = volume / 100.0f;
-			general = Math.max(0.12f, 1.0f - 0.85f * v);
+		if (loudness > 0.01f) {
+			general = Math.max(0.12f, 1.0f - 0.85f * loudness);
 			music = Math.min(general, 0.3f); // game music always ducks hard under real music
 		}
 		VolumeDucker.setFactors(general, music);

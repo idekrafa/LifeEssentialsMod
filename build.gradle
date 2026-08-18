@@ -15,6 +15,125 @@ java {
 	}
 }
 
+repositories {
+	mavenCentral()
+	maven {
+		name = 'Lavalink'
+		url = 'https://maven.lavalink.dev/releases'
+		content { includeGroup 'dev.lavalink.youtube' }
+	}
+}
+
+/*
+ * The audio engine is NOT shaded into this mod.
+ *
+ * It used to be, relocated, except for `com.sedmelluq.discord.lavaplayer.natives`,
+ * which has to keep its original package because JNI symbol names are mangled from
+ * the class name. That one exception is fatal: NeoForge makes every mod jar a JPMS
+ * module, and a second module exporting the same package is a hard resolution
+ * failure — the game will not boot alongside Iam Music Player, or any other mod
+ * bundling LavaPlayer the same way. Borrowing their copy fails too; their JNI
+ * classes extend their own relocated base class (see ARCHITECTURE).
+ *
+ * So the engine ships as *jars*, under `lifeessentials/lib/`. Resources declare no
+ * packages, so there is nothing for the module system to collide on, and
+ * `BackendLoader` loads them at runtime into a child classloader where the class
+ * names stay original and JNI resolves.
+ *
+ * A happy side effect: the engine gets its own httpclient, so Minecraft's `strictly
+ * 4.5.13` pin no longer has to be worked around.
+ */
+sourceSets {
+	backend
+}
+
+configurations {
+	lavaRuntime
+	backendCompileOnly.extendsFrom lavaRuntime
+}
+
+dependencies {
+	lavaRuntime("dev.arbjerg:lavaplayer:${project.lavaplayer_version}") {
+		exclude group: 'org.slf4j' // the game provides it; the child loader delegates up for it
+	}
+	lavaRuntime("dev.lavalink.youtube:v2:${project.youtube_source_version}") {
+		exclude group: 'org.slf4j'
+	}
+	// The backend implements interfaces that live in the mod proper. Deliberately
+	// the compiled *classes* and not sourceSets.main.output: the latter also carries
+	// processed resources, which now depend on the backend jar — a task cycle.
+	backendCompileOnly sourceSets.main.output.classesDirs
+}
+
+tasks.named('compileBackendJava') {
+	dependsOn tasks.named('compileJava')
+}
+
+/** Names the runtime needs, because a jar cannot list its own resource directory. */
+def libIndex = layout.buildDirectory.file('generated/lib-index/index.txt')
+tasks.register('generateLibIndex') {
+	dependsOn tasks.named('backendJar')
+	inputs.files(configurations.lavaRuntime)
+	outputs.file libIndex
+	doLast {
+		def names = configurations.lavaRuntime.files.collect { it.name }
+		names += tasks.backendJar.archiveFileName.get()
+		def file = libIndex.get().asFile
+		file.parentFile.mkdirs()
+		file.text = names.join('\n') + '\n'
+	}
+}
+
+tasks.register('backendJar', Jar) {
+	archiveBaseName = 'lifeessentials-backend'
+	archiveVersion = ''
+	from sourceSets.backend.output
+	destinationDirectory = layout.buildDirectory.dir('backend-lib')
+}
+
+/*
+ * Staged through processResources rather than added to the jar directly, so a dev
+ * run finds them on the classpath exactly the way a packaged install finds them
+ * inside the jar. One mechanism, both environments.
+ */
+/*
+ * LavaPlayer ships 13 platform binaries and they are most of the download. Decoding
+ * only ever happens on a *client*, so we keep the platforms people play on: macOS
+ * (one universal binary covers Intel and Apple Silicon), 64-bit Windows, and 64-bit
+ * Linux, which covers the Steam Deck. A client on anything else falls back to
+ * ffmpeg rather than losing audio.
+ */
+def nativesJar = { configurations.lavaRuntime.files.find { it.name.startsWith('lavaplayer-natives') } }
+tasks.register('trimNatives', Jar) {
+	archiveFileName = "lavaplayer-natives-${project.lavaplayer_version}.jar"
+	destinationDirectory = layout.buildDirectory.dir('trimmed-natives')
+	from { zipTree(nativesJar()) }
+	exclude 'natives/win-x86/**'
+	exclude 'natives/linux-x86/**'
+	exclude 'natives/linux-arm/**'
+	exclude 'natives/linux-armhf/**'
+	exclude 'natives/linux-aarch32/**'
+	exclude 'natives/linux-aarch64/**'
+	exclude 'natives/linux-musl-x86-64/**'
+	exclude 'natives/linux-musl-aarch64/**'
+}
+
+processResources {
+	dependsOn tasks.named('generateLibIndex')
+	// the untrimmed natives artifact is replaced by the trimmed build of it
+	from(configurations.lavaRuntime.filter { !it.name.startsWith('lavaplayer-natives') }) {
+		into 'lifeessentials/lib'
+	}
+	from(tasks.named('trimNatives')) { into 'lifeessentials/lib' }
+	from(tasks.named('backendJar')) { into 'lifeessentials/lib' }
+	from(libIndex) { into 'lifeessentials/lib' }
+
+	inputs.property 'version', project.version
+	filesMatching('META-INF/neoforge.mods.toml') {
+		expand 'version': project.version
+	}
+}
+
 neoForge {
 	version = project.neo_version
 
