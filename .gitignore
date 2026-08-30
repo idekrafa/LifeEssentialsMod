@@ -5,6 +5,7 @@ build/
 # ModDevGradle / run environments
 run/
 runs/
+logs/
 
 # IDEs
 .idea/

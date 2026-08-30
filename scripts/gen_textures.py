@@ -402,6 +402,195 @@ def icon_airpods_small():
     return px
 
 
+# ------------------------------------------------------------ block: jbl speaker
+
+JBL_ORANGE = "ff6b1e"
+
+
+def _woven(seed=0):
+    """
+    Black knitted speaker mesh. Deliberately low contrast on a 1px checker: it
+    reads as fine fabric up close and blurs to flat charcoal under mipmapping,
+    which is exactly what the real cloth does.
+    """
+    px = canvas(16, 16, hx("15151a"))
+    for y in range(16):
+        for x in range(16):
+            if (x + y + seed) % 2 == 0:
+                px[y][x] = hx("1b1b21")
+            # sparse brighter threads so it isn't a perfect grid
+            if (x * 5 + y * 3 + seed) % 23 == 0:
+                px[y][x] = hx("24242c")
+            elif (x * 3 + y * 7 + seed) % 29 == 0:
+                px[y][x] = hx("101014")
+    return px
+
+
+def jbl_grille():
+    return _woven()
+
+
+# 3x5 letterforms, drawn big enough to survive 16px
+_LETTERS = {
+    "J": ["..#", "..#", "..#", "#.#", "##."],
+    "B": ["##.", "#.#", "##.", "#.#", "##."],
+    "L": ["#..", "#..", "#..", "#..", "###"],
+}
+
+
+def jbl_front():
+    """Fabric with the JBL wordmark, like the front of the real thing."""
+    px = _woven()
+    o = hx(JBL_ORANGE)
+    shadow = hx("7d3009")
+    for index, letter in enumerate("JBL"):
+        ox = 3 + index * 4
+        for row, line in enumerate(_LETTERS[letter]):
+            for col, ch in enumerate(line):
+                if ch != "#":
+                    continue
+                x, y = ox + col, 6 + row
+                if y + 1 < 16:
+                    px[y + 1][x] = shadow      # drop shadow first
+                px[y][x] = o
+    return px
+
+
+def _radiator(ring, centre, glow_ring):
+    """
+    The Boombox's exposed passive radiator: a wide dished cone inside a bright
+    orange rubber surround, with a dark dust cap in the middle.
+    """
+    px = canvas(16, 16, hx("0c0c10"))
+    cx = cy = 7.5
+    for y in range(16):
+        for x in range(16):
+            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            if d > 7.6:
+                px[y][x] = hx("101014")            # corner shadow
+            elif d > 6.6:
+                px[y][x] = hx("2a2a32")            # chassis rim
+            elif d > 5.2:
+                px[y][x] = ring                    # orange rubber surround
+            elif d > 4.6:
+                px[y][x] = glow_ring               # inner highlight of the surround
+            elif d > 2.2:
+                # dished cone, lit from the top-left
+                shade = (x - cx) * 0.35 + (y - cy) * 0.35
+                if shade < -1.6:
+                    px[y][x] = hx("34343e")
+                elif shade < 0.4:
+                    px[y][x] = hx("26262e")
+                else:
+                    px[y][x] = hx("1a1a22")
+            elif d > 1.9:
+                px[y][x] = hx("101016")            # cap seam
+            else:
+                px[y][x] = centre                  # dust cap
+    return px
+
+
+def jbl_end():
+    return _radiator(hx(JBL_ORANGE), hx("1d1d24"), hx("d2560f"))
+
+
+def jbl_end_on():
+    return _radiator(hx("ff9548"), hx("2a2a34"), hx("ffbe7a"))
+
+
+def jbl_top():
+    """Fabric wrap with the rubber control pad moulded into it."""
+    px = _woven(1)
+    pad = hx("232329")
+    rect(px, 3, 5, 12, 10, pad)
+    rect(px, 3, 5, 12, 5, hx("2c2c33"))
+    rect(px, 3, 10, 12, 10, hx("161619"))
+    return px
+
+
+def jbl_bottom():
+    rubber = hx("101014")
+    px = canvas(16, 16, rubber)
+    for y in range(16):
+        for x in range(16):
+            if (x + y * 3) % 5 == 0:
+                px[y][x] = hx("0a0a0d")
+            elif (x * 5 + y) % 9 == 0:
+                px[y][x] = hx("18181d")
+    # moulded rubber foot strips
+    rect(px, 2, 5, 5, 10, hx("1e1e24"))
+    rect(px, 10, 5, 13, 10, hx("1e1e24"))
+    return px
+
+
+def jbl_handle():
+    """Rubberised carry strap — dark, with a stitched orange edge."""
+    px = canvas(16, 16, hx("1c1c22"))
+    for y in range(16):
+        for x in range(16):
+            if (x * 3 + y) % 7 == 0:
+                px[y][x] = hx("242430")
+            elif (x + y * 5) % 11 == 0:
+                px[y][x] = hx("15151a")
+    rect(px, 0, 0, 15, 0, hx("2e2e38"))
+    rect(px, 0, 15, 15, 15, hx("0f0f13"))
+    rect(px, 0, 7, 15, 7, hx("8a3a0c"))
+    return px
+
+
+def jbl_buttons():
+    """
+    The rubber control pad. It renders as a thin strip on top of the block, so
+    this favours five clearly separated blobs over fussy iconography.
+    """
+    px = canvas(16, 16, hx("202027"))
+    white = hx("e8ebf0")
+    orange = hx(JBL_ORANGE)
+    blue = hx("3fa9e8")
+
+    # five 2px keys with a 1px gap between them, so they stay separate blobs
+    wells = [0, 3, 6, 9, 12]
+    for x0 in wells:
+        rect(px, x0, 4, x0 + 1, 11, hx("2b2b35"))
+        rect(px, x0, 11, x0 + 1, 11, hx("16161b"))
+
+    power, bt, play, minus, plus = wells
+    # power: stem over an open arc
+    rect(px, power, 5, power, 7, white)
+    px[8][power + 1] = white
+    px[9][power] = white
+    # bluetooth
+    rect(px, bt, 5, bt, 9, blue)
+    px[6][bt + 1] = blue
+    px[8][bt + 1] = blue
+    # play triangle
+    rect(px, play, 5, play, 9, orange)
+    rect(px, play + 1, 6, play + 1, 8, orange)
+    # volume down / up
+    rect(px, minus, 7, minus + 1, 7, white)
+    rect(px, plus, 7, plus + 1, 7, white)
+    px[6][plus] = white
+    px[8][plus] = white
+    return px
+
+
+def icon_playlists():
+    s = 20
+    px = canvas(s, s, hx(JBL_ORANGE))
+    rounded_mask(px, s)
+    w = hx("ffffff")
+    d = hx("7a2f0a")
+    # three list rows
+    for y in (5, 9, 13):
+        rect(px, 4, y, 11, y, w)
+        rect(px, 4, y + 1, 11, y + 1, d)
+    # eighth note over the list
+    rect(px, 13, 3, 14, 12, w)
+    rect(px, 13, 3, 16, 4, w)
+    rect(px, 11, 12, 14, 14, w)
+    return px
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -417,6 +606,15 @@ def main():
     write_png(os.path.join(tex, "gui", "icon_settings.png"), icon_settings())
     write_png(os.path.join(tex, "gui", "icon_speaker.png"), icon_speaker())
     write_png(os.path.join(tex, "gui", "icon_airpods.png"), icon_airpods_small())
+    write_png(os.path.join(tex, "gui", "icon_playlists.png"), icon_playlists())
+    write_png(os.path.join(tex, "block", "jbl_speaker_grille.png"), jbl_grille())
+    write_png(os.path.join(tex, "block", "jbl_speaker_front.png"), jbl_front())
+    write_png(os.path.join(tex, "block", "jbl_speaker_handle.png"), jbl_handle())
+    write_png(os.path.join(tex, "block", "jbl_speaker_end.png"), jbl_end())
+    write_png(os.path.join(tex, "block", "jbl_speaker_end_on.png"), jbl_end_on())
+    write_png(os.path.join(tex, "block", "jbl_speaker_top.png"), jbl_top())
+    write_png(os.path.join(tex, "block", "jbl_speaker_bottom.png"), jbl_bottom())
+    write_png(os.path.join(tex, "block", "jbl_speaker_buttons.png"), jbl_buttons())
     write_png(os.path.join(ASSETS, "icon.png"), upscale(phone_item(), 8))
     print("done.")
 

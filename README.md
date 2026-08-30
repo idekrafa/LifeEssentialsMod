@@ -4,8 +4,8 @@
 
 # 📱 Life Essentials
 
-**An iPhone in Minecraft — for real.** Control your actual Spotify or Apple Music,
-text other players' phones, share music with everyone around you, and flex your AirPods.
+**An iPhone in Minecraft — for real.** Control your actual Spotify or Apple Music, text other
+players' phones, build playlists, and blast them out of a JBL speaker the whole server hears.
 
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62b47a?style=for-the-badge)](https://www.minecraft.net)
 [![NeoForge](https://img.shields.io/badge/NeoForge-21.1%2B-e68c3f?style=for-the-badge)](https://neoforged.net)
@@ -67,14 +67,45 @@ automatically (physics is undefeated).
 </tr>
 </table>
 
+### 🔊 JBL Speaker — real audio, out loud, for everyone
+
+A **placeable 3D block** modelled on the real Boombox — fabric-wrapped body,
+a rubber carry handle over the top, big orange passive radiators on both ends
+that light up while it's playing, and the control pad moulded into the shell.
+Right-click it for the deck.
+
+Load it with a playlist and **everybody in range genuinely hears the music**:
+same song, same second, positioned in the world. Walk around it and it pans
+between your ears; walk away and it fades out. The louder it is, the more the
+game ducks under it.
+
+| What you can queue | How it plays |
+| :-- | :-- |
+| **MP3 / FLAC / M4A / WAV / OGG / OPUS** | decoded and played from each listener's `lifeessentials-music` folder |
+| **Direct http(s) links** | streamed straight off the web — nobody needs a local copy |
+| **YouTube + YouTube Music links** | resolved and decoded in-process — nothing to install |
+| **YouTube / YT Music playlists** | imports up to 100 tracks in one paste |
+| **Spotify tracks** | handed to each listener's desktop Spotify (DRM can't be decoded — see the FAQ) |
+
+Shuffle, three repeat modes, a volume slider, an 8–64 block range slider, and a
+**redstone input** that works like tapping play/pause. Comparators read whether
+it's playing.
+
+### 📝 Playlists — the manager lives on your iPhone
+
+Open **Playlists** on the phone: make a playlist, paste in links or tap files
+out of your music folder, drag tracks up and down, delete what you don't want.
+Playlists are **stored on the server**, so everyone sees the same ones and they
+survive restarts. Tap any track to start the nearest speaker on it.
+
 ## 🛠 Crafting
 
-| <img src="docs/media/circuit_board.png" width="64"><br>**Circuit Board** | <img src="docs/media/phone_item.png" width="64"><br>**iPhone** | <img src="docs/media/airpods_item.png" width="64"><br>**AirPods** |
-| :---: | :---: | :---: |
-| 🔴 🔴 🔴<br>🟡 ⬜ 🟡<br>🔴 🔴 🔴 | ⬜ ⬜ ⬜<br>⬜ ⬜ ⬜<br>⬜ 🟩 ⬜ | ⬜ ▪️ ⬜<br>⬜ 🟩 ⬜<br>▪️ ▪️ ▪️ |
-| redstone • gold nugget • iron | iron ingots • circuit board | quartz • circuit board |
+| <img src="docs/media/circuit_board.png" width="64"><br>**Circuit Board** | <img src="docs/media/phone_item.png" width="64"><br>**iPhone** | <img src="docs/media/airpods_item.png" width="64"><br>**AirPods** | **JBL Speaker** |
+| :---: | :---: | :---: | :---: |
+| 🔴 🔴 🔴<br>🟡 ⬜ 🟡<br>🔴 🔴 🔴 | ⬜ ⬜ ⬜<br>⬜ ⬜ ⬜<br>⬜ 🟩 ⬜ | ⬜ ▪️ ⬜<br>⬜ 🟩 ⬜<br>▪️ ▪️ ▪️ | ⬛ ⬛ ⬛<br>🎵 🟩 🎵<br>⬜ ⬜ ⬜ |
+| redstone • gold nugget • iron | iron ingots • circuit board | quartz • circuit board | black wool • note block • circuit board • iron |
 
-<sub>🔴 redstone 🟡 gold nugget ⬜ iron/quartz 🟩 circuit board ▪️ empty</sub>
+<sub>🔴 redstone 🟡 gold nugget ⬜ iron/quartz 🟩 circuit board ⬛ black wool 🎵 note block ▪️ empty</sub>
 
 ## 📦 Install
 
@@ -89,22 +120,59 @@ automatically (physics is undefeated).
 > **Windows heads-up:** control goes through Windows' own media session system — no setup.
 > If the phone says "Spotify not found", just open Spotify once so it can be detected.
 
+### 🎚 Speaker setup
+
+**None.** Since 2.0 the decoder is built into the mod — mp3, flac, m4a, opus, web
+links and YouTube all play out of the box, with nothing to install.
+
+Built-in decoding covers **macOS** (Intel and Apple Silicon), **64-bit Windows** and
+**64-bit Linux** (Steam Deck included). On anything else — 32-bit, ARM Linux, Alpine —
+the mod falls back to `ffmpeg`/`yt-dlp` if you have them, so you lose the convenience
+but not the audio.
+
+<sub>Versions before 2.0 needed `ffmpeg` on every listening machine, plus `yt-dlp` for
+YouTube. That path is still there as an automatic fallback if the built-in decoder
+can't start on your platform, but you shouldn't need it. Either way your **server**
+never decodes anything — it only ever says which track and how far in.</sub>
+
+Sharing a song from YouTube Music tacks a radio playlist onto the link; the mod
+treats that as the one song you meant, not a hundred-track import. Paste a real
+`/playlist?list=…` link when you do want the whole thing.
+
+**Your music folder** is `<game dir>/lifeessentials-music/` — created on first
+join, with a readme inside. Drop audio files in and they appear under
+*Local files* in the phone's import screen. Playlists share only the **file
+name**, so each player plays their own copy; anyone missing the file just hears
+silence for that track. Use an http(s) link if you want everyone covered without
+passing files around.
+
 ## 🧱 Building from source
 
 ```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 ./gradlew build
 ```
 
-Needs Java 21 (`brew install openjdk@21` on macOS). The jar lands in `build/libs/`.
+Needs Java 21 (`brew install openjdk@21` on macOS). Homebrew's JDK is keg-only, so
+Gradle can't start without `JAVA_HOME` exported. The jar lands in `build/libs/`.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the speaker's audio sync, decoder
+pipeline and trust boundary actually work.
 All textures are original pixel art generated by `python3 scripts/gen_textures.py` —
 no Apple or Spotify assets are shipped.
 
 ## ❓ FAQ
 
-**Why don't other players hear the literal audio stream?**
+**How does everyone hear the same thing without the server streaming audio?**
+The server only ever sends *which track, and how far into it*. Every client in range decodes
+its own copy locally and starts at that offset, so you all hear the same second of the same
+song without a byte of audio crossing the network. The server resyncs every five seconds; a
+client that drifts more than 2.5 s re-seeks itself.
+
+**Why can't the speaker play Spotify audio directly?**
 Spotify/Apple Music don't allow re-streaming audio to other people — technically or legally.
-Listen Along is the honest version: it syncs the *track*, and each listener's own Spotify
-plays it. Same song, same moment, fully legit.
+A Spotify track in a playlist does the honest version instead: the speaker tells everyone in
+range *which* track, and each listener's own desktop Spotify plays it. Same song, same
+moment, fully legit. Use mp3s or YouTube if you want the speaker itself making the sound.
 
 **Does music control work on Windows/Linux?**
 **Windows: yes** — via the System Media Transport Controls (AppleScript on macOS). Two
@@ -113,6 +181,21 @@ Windows-specific quirks: the slider ducks game audio but can't change Spotify's 
 can't drive auto-play on listeners (no track ids in the media session API) — receiving
 Listen Along from macOS players works fully. Linux isn't supported yet. The phone, texting,
 and AirPods work everywhere.
+
+**A YouTube track takes a few seconds to start.**
+Normal — around three or four. YouTube signs its audio links with a cipher that has to be
+worked out before anything can be fetched. Once playing, decoding runs hundreds of times
+faster than realtime, so it never stutters after that. The speaker skips ahead by however
+long the start-up took, which is what lands you in sync with everyone already listening.
+
+If a track fails outright, the reason lands in your chat rather than leaving you with
+silence and no explanation.
+
+**Is the speaker safe on a public server?**
+Track sources are validated server-side: file names can't escape the music folder, and only
+`http`/`https` links are allowed through — no `file:` or other protocols. Do keep in mind
+that a playlist *link* is a url your client will fetch, so treat a server's playlists the way
+you'd treat any link someone sends you.
 
 **Which loaders?**
 NeoForge 1.21.1 (this repo). A legacy Fabric build exists but is unmaintained.

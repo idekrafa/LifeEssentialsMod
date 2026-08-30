@@ -19,6 +19,8 @@ public class HomeScreen extends PhoneUiScreen {
 			ResourceLocation.fromNamespaceAndPath(LifeEssentials.MOD_ID, "textures/gui/icon_apple_music.png");
 	private static final ResourceLocation ICON_MESSAGES =
 			ResourceLocation.fromNamespaceAndPath(LifeEssentials.MOD_ID, "textures/gui/icon_messages.png");
+	private static final ResourceLocation ICON_PLAYLISTS =
+			ResourceLocation.fromNamespaceAndPath(LifeEssentials.MOD_ID, "textures/gui/icon_playlists.png");
 
 	private record AppIcon(String label, ResourceLocation texture, Runnable open) {
 	}
@@ -37,6 +39,8 @@ public class HomeScreen extends PhoneUiScreen {
 		apps.add(new AppIcon("Music", ICON_APPLE_MUSIC, () -> openMusic("apple_music")));
 		apps.add(new AppIcon("Messages", ICON_MESSAGES,
 				() -> this.minecraft.setScreen(new MessagesAppScreen(hand))));
+		apps.add(new AppIcon("Playlists", ICON_PLAYLISTS,
+				() -> this.minecraft.setScreen(new PlaylistsAppScreen(hand))));
 	}
 
 	private void openMusic(String service) {
